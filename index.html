@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es" class="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de Control de Tickets y Servicio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','ui-sans-serif','system-ui','sans-serif']}}}}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+  html.sk,html.sk body{overflow:hidden;height:100%;overscroll-behavior:none}
+  .lock{pointer-events:none;background:#f1f5f9!important;color:#64748b!important}
+  body{font-feature-settings:"tnum"}
+  .tbl th{position:sticky;top:0;background:#fff;box-shadow:inset 0 -1px 0 #e2e8f0;z-index:1}
+  .tbl td,.tbl th{padding:.5rem .75rem;text-align:left}
+  .tbl .n{text-align:right;white-space:nowrap}
+  .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  body.sk [data-sk]{position:relative;overflow:hidden;pointer-events:none}
+  body.sk [data-sk=tall]{min-height:18rem}
+  body.sk [data-sk]>*{visibility:hidden}
+  body.sk [data-sk]::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:200% 100%;animation:sh 1.4s linear infinite}
+  @media (prefers-reduced-motion:reduce){body.sk [data-sk]::after{animation:none}}
+  summary{list-style:none}summary::-webkit-details-marker{display:none}
+  .chev{display:inline-block;transition:transform .15s}details[open]>summary .chev{transform:rotate(90deg)}
+  #cta{display:none}body.sk #cta{display:block}
+</style>
+</head>
+<body class="sk bg-slate-50 text-slate-800 font-sans antialiased">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5 relative">
+
+  <!-- Header -->
+  <header class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Dashboard de Control de Tickets y Servicio</h1>
+      <p class="text-sm text-slate-500 mt-1"><span id="period" class="inline-block bg-white border border-slate-200 rounded-md px-2 py-0.5 text-slate-700"></span> <span id="source" class="ml-2"></span></p>
+    </div>
+    <div>
+      
+<input id="file" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
+
+      <button id="btnImport" class="bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-white text-sm font-medium px-4 py-2 rounded-md shadow-sm">Importar Excel</button>
+    </div>
+  </header>
+  <p id="msg" role="status" class="hidden text-sm rounded-md px-3 py-2"></p>
+
+  <!-- Filtros -->
+  <section data-sk class="bg-white border border-slate-200 rounded-lg shadow-sm p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+    <label class="text-xs font-medium text-slate-500">Desde · fecha del Excel<input id="fFrom" type="date" readonly tabindex="-1" aria-readonly="true" class="lock mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm"></label>
+    <label class="text-xs font-medium text-slate-500">Hasta · fecha del Excel<input id="fTo" type="date" readonly tabindex="-1" aria-readonly="true" class="lock mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm"></label>
+    <label class="text-xs font-medium text-slate-500">Grupo<select id="fGrupo" class="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white text-slate-800"></select></label>
+    <label class="text-xs font-medium text-slate-500">Servicio<select id="fServicio" class="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white text-slate-800"></select></label>
+    <label class="text-xs font-medium text-slate-500">Empleado<select id="fEmpleado" class="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white text-slate-800"></select></label>
+    <button id="btnClear" class="border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-1.5 rounded-md">Limpiar filtros</button>
+  </section>
+
+  <!-- KPIs -->
+  <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div data-sk class="bg-white border border-slate-200 rounded-lg shadow-sm p-4"><p class="text-xs font-medium text-slate-500">Total de tickets</p><p id="kTickets" class="text-2xl font-semibold text-slate-900 mt-1">0</p></div>
+    <div data-sk class="bg-white border border-slate-200 rounded-lg shadow-sm p-4"><p class="text-xs font-medium text-slate-500">Horas incurridas</p><p id="kHoras" class="text-2xl font-semibold text-indigo-600 mt-1">0</p></div>
+    <div data-sk class="bg-white border border-slate-200 rounded-lg shadow-sm p-4"><p class="text-xs font-medium text-slate-500">Promedio de horas por ticket</p><p id="kProm" class="text-2xl font-semibold text-slate-900 mt-1">0</p></div>
+    <div data-sk class="bg-white border border-slate-200 rounded-lg shadow-sm p-4"><p class="text-xs font-medium text-slate-500">Empleados activos</p><p id="kEmp" class="text-2xl font-semibold text-emerald-600 mt-1">0</p></div>
+  </section>
+
+  <!-- CTA inicial -->
+  <div id="cta" class="fixed left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-md bg-white border border-slate-200 rounded-lg shadow-lg p-5 text-center">
+    <p class="text-base font-semibold text-slate-900">Por favor, importa el archivo Excel</p>
+    <p class="text-sm text-slate-500 mt-1">Haz clic en el botón o arrastra el archivo hasta aquí. Solo se aceptan archivos Excel (.xlsx).</p>
+    <button id="btnImport2" class="mt-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-md shadow-sm">Importar Excel</button>
+    <p id="ctaErr" class="mt-2 text-sm text-red-700"></p>
+  </div>
+
+  <nav role="tablist" class="flex gap-1 border-b border-slate-200">
+    <button data-tab="graficas" role="tab"></button><button data-tab="resumenes" role="tab"></button><button data-tab="registro" role="tab"></button>
+  </nav>
+
+  <!-- Sección 1: Gráficas -->
+  <section data-panel="graficas">
+    <div class="grid lg:grid-cols-2 gap-3 items-start">
+      <div data-sk="tall" class="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <div class="flex items-baseline justify-between"><h2 class="text-sm font-semibold text-slate-900">Horas por empleado</h2><span id="empNote" class="text-xs text-slate-500"></span></div>
+        <div id="wBar" class="relative mt-3" style="height:260px"><canvas id="cBar"></canvas><p class="empty absolute inset-0 hidden items-center justify-center text-sm text-slate-400">Sin datos para los filtros seleccionados</p></div>
+      </div>
+      <div data-sk="tall" class="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <div class="flex items-baseline justify-between"><h2 class="text-sm font-semibold text-slate-900">Tickets por empleado</h2></div>
+        <div id="wTick" class="relative mt-3" style="height:260px"><canvas id="cTick"></canvas><p class="empty absolute inset-0 hidden items-center justify-center text-sm text-slate-400">Sin datos para los filtros seleccionados</p></div>
+      </div>
+      <div data-sk="tall" class="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <div class="flex items-baseline justify-between"><h2 class="text-sm font-semibold text-slate-900">Promedio de horas por ticket, por empleado</h2></div>
+        <div id="wAvg" class="relative mt-3" style="height:260px"><canvas id="cAvg"></canvas><p class="empty absolute inset-0 hidden items-center justify-center text-sm text-slate-400">Sin datos para los filtros seleccionados</p></div>
+      </div>
+      <div data-sk="tall" class="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <h2 class="text-sm font-semibold text-slate-900">Tickets por tipo de servicio</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Haz clic en un servicio para ver el detalle (ID, empleado, aplicación, horas). Usa el filtro Empleado para verlo por persona.</p>
+        <div class="relative mt-3" style="height:280px"><canvas id="cDonut"></canvas><p class="empty absolute inset-0 hidden items-center justify-center text-sm text-slate-400">Sin datos para los filtros seleccionados</p></div>
+        <div id="svList" class="mt-3 flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 2: Resúmenes -->
+  <section data-panel="resumenes" class="hidden grid lg:grid-cols-12 gap-3 items-start">
+    <div data-sk="tall" class="lg:col-span-5 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-2"><h2 class="text-sm font-semibold text-slate-900">Resumen por empleado</h2><button id="btnReport" class="border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium px-2.5 py-1 rounded-md">Descargar reporte (PDF)</button></div>
+      <div class="overflow-auto max-h-[32rem]"><table class="tbl w-full text-sm"><thead><tr class="text-xs text-slate-500"><th>Empleado</th><th class="n">Tickets</th><th class="n">Horas</th><th class="n">Reporte</th></tr></thead><tbody id="tEmp"></tbody></table></div>
+    </div>
+    <div data-sk="tall" class="lg:col-span-7 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-2"><h2 class="text-sm font-semibold text-slate-900">Resumen por grupo, aplicación y subaplicación</h2><div class="flex gap-1.5"><button id="btnOpen" class="border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium px-2.5 py-1 rounded-md">Expandir</button><button id="btnShut" class="border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium px-2.5 py-1 rounded-md">Contraer</button></div></div>
+      <div class="grid grid-cols-[1fr_4.5rem_5rem] gap-2 px-3 py-2 text-xs text-slate-500 border-y border-slate-100"><span class="pl-5">Jerarquía</span><span class="text-right">Tickets</span><span class="text-right">Horas</span></div>
+      <div id="tTree" class="max-h-[30rem] overflow-auto text-sm"></div>
+    </div>
+  </section>
+
+  <!-- Sección 3: Registro de tickets -->
+  <section data-panel="registro" data-sk="tall" class="hidden bg-white border border-slate-200 rounded-lg shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
+      <h2 class="text-sm font-semibold text-slate-900">Registro de tickets</h2>
+      <input id="fSearch" type="search" maxlength="60" placeholder="Buscar por ID, empleado o descripción" class="w-full sm:w-72 border border-slate-300 rounded-md px-2 py-1.5 text-sm">
+    </div>
+    <div class="overflow-x-auto"><table class="tbl w-full text-sm"><thead><tr class="text-xs text-slate-500"><th>ID Hermes</th><th>Empleado</th><th>Servicio</th><th>Grupo / Aplicación</th><th class="n">Horas</th><th class="n">Fecha</th></tr></thead><tbody id="tLog"></tbody></table></div>
+    <div class="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
+      <span id="pInfo"></span>
+      <div class="flex gap-2">
+        <button id="pPrev" class="border border-slate-300 rounded-md px-3 py-1 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white">Anterior</button>
+        <button id="pNext" class="border border-slate-300 rounded-md px-3 py-1 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white">Siguiente</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="drop" class="hidden fixed inset-0 z-[60] bg-emerald-600/10 border-4 border-dashed border-emerald-500 items-center justify-center pointer-events-none"><p class="bg-white rounded-md px-4 py-2 text-sm font-medium text-emerald-700 shadow">Suelta el archivo Excel (.xlsx) para importarlo</p></div>
+
+  <!-- Detalle / reporte -->
+  <div id="modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-4xl max-h-[85vh] flex flex-col">
+      <div class="flex items-start justify-between gap-3 p-4 border-b border-slate-100"><div><h2 id="mTitle" class="text-base font-semibold text-slate-900"></h2><p id="mSub" class="text-sm text-slate-500 mt-0.5"></p></div><button id="mClose" aria-label="Cerrar" class="text-slate-400 hover:text-slate-700 text-xl leading-none px-2">×</button></div>
+      <div class="overflow-auto"><table class="tbl w-full text-sm"><thead><tr class="text-xs text-slate-500"><th>ID Hermes</th><th>Empleado</th><th>Servicio</th><th>Grupo / Aplicación</th><th class="n">Horas</th><th class="n">Fecha</th></tr></thead><tbody id="mBody"></tbody></table></div>
+      <div class="flex items-center justify-between gap-2 p-3 border-t border-slate-100 text-xs text-slate-500"><span id="mNote"></span><button id="mDl" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-3 py-1.5 rounded-md">Descargar PDF</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Utilidades ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = new Intl.NumberFormat('es-MX', {minimumFractionDigits: 1, maximumFractionDigits: 2});
+const n0 = new Intl.NumberFormat('es-MX');
+const fmtDate = iso => iso ? iso.split('-').reverse().join('/') : '—';
+const normKey = k => String(k).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const clean = v => v == null ? '' : String(v).replace(/\s+/g, ' ').trim();
+const COLORS = ['#6366f1','#10b981','#94a3b8','#0ea5e9','#a78bfa','#34d399','#cbd5e1','#475569'];
+
+function parseDate(v) {
+  if (v == null || v === '') return null;
+  let y, m, d, x;
+  if (typeof v === 'number') { const p = XLSX.SSF.parse_date_code(v); if (!p) return null; ({y, m, d} = p); }
+  else if (v instanceof Date) { y = v.getFullYear(); m = v.getMonth() + 1; d = v.getDate(); }
+  else if ((x = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) { d = +x[1]; m = +x[2]; y = +x[3]; }
+  else if ((x = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/))) { y = +x[1]; m = +x[2]; d = +x[3]; }
+  else return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+const parseHours = v => { const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.')); return isNaN(n) ? 0 : n; };
+
+// Acepta tanto el formato de muestra como el Excel real de Hermes (SERVICIO = MODIFICACION)
+function normalize(rows) {
+  const out = [];
+  for (const raw of rows) {
+    const o = {}; for (const k in raw) o[normKey(k)] = raw[k];
+    const pick = (...ks) => { for (const k of ks) if (o[k] != null && clean(o[k]) !== '') return o[k]; return ''; };
+    let id = pick('HERMES'); if (typeof id === 'number') id = Math.round(id);
+    id = clean(id); if (!id) continue;
+    out.push({
+      id, grupo: clean(pick('GRUPO')) || 'Sin grupo',
+      app: clean(pick('APLICACION', 'APL')) || 'Sin aplicación',
+      sub: clean(pick('SUBAPLICACION', 'SUBAPL')) || 'Sin subaplicación',
+      servicio: clean(pick('MODIFICACION', 'SERVICIO')) || 'Sin servicio',
+      empleado: clean(pick('EMPLEADO')) || 'Sin asignar',
+      horas: parseHours(pick('INCURRIDO')),
+      fecha: parseDate(pick('FECHA INICIO', 'FECHA')),
+      desc: clean(pick('DESCRIPCION'))
+    });
+  }
+  return out.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || b.id.localeCompare(a.id, 'es', {numeric: true}));
+}
+
+// ---------- Estado ----------
+let ALL = [], charts = {}, page = 1, search = '';
+const PAGE_SIZE = 20, RANGE = {min: '', max: ''};
+const F = {from: '', to: '', grupo: '', servicio: '', empleado: ''};
+
+const dateOk = r => r.fecha
+  ? (!F.from || r.fecha >= F.from) && (!F.to || r.fecha <= F.to)
+  : F.from === RANGE.min && F.to === RANGE.max;  // sin fecha: se incluye mientras el rango esté completo
+const filtered = () => ALL.filter(r => dateOk(r) &&
+  (!F.grupo || r.grupo === F.grupo) && (!F.servicio || r.servicio === F.servicio) && (!F.empleado || r.empleado === F.empleado));
+
+function groupBy(rows, key) {
+  const m = new Map();
+  for (const r of rows) { const g = m.get(r[key]) || {name: r[key], t: 0, h: 0}; g.t++; g.h += r.horas; m.set(r[key], g); }
+  return [...m.values()].sort((a, b) => b.h - a.h);
+}
+
+// ---------- Render ----------
+function renderKPIs(rows) {
+  const h = rows.reduce((s, r) => s + r.horas, 0);
+  $('kTickets').textContent = n0.format(rows.length);
+  $('kHoras').textContent = nf.format(h);
+  $('kProm').textContent = rows.length ? nf.format(h / rows.length) : '0';
+  $('kEmp').textContent = n0.format(new Set(rows.map(r => r.empleado)).size);
+}
+
+function drawChart(id, cfg, hasData) {
+  const canvas = $(id), empty = canvas.parentElement.querySelector('.empty');
+  if (charts[id]) charts[id].destroy();
+  empty.classList.toggle('hidden', hasData); empty.classList.toggle('flex', !hasData);
+  canvas.style.display = hasData ? '' : 'none';
+  if (hasData && typeof Chart !== 'undefined') charts[id] = new Chart(canvas, cfg);
+}
+
+function barChart(id, wrapId, list, val, color, unit, fmt) {
+  const data = list.map(e => Math.round(val(e) * 100) / 100);
+  $(wrapId).style.height = Math.max(200, list.length * 28 + 40) + 'px';
+  const labels = {id: 'vl', afterDatasetsDraw(c) {
+    const ctx = c.ctx; ctx.save(); ctx.fillStyle = '#475569'; ctx.font = '11px Inter, sans-serif'; ctx.textBaseline = 'middle';
+    c.getDatasetMeta(0).data.forEach((b, i) => ctx.fillText(fmt.format(data[i]), b.x + 5, b.y)); ctx.restore();
+  }};
+  drawChart(id, {
+    type: 'bar', plugins: [labels],
+    data: {labels: list.map(e => e.name), datasets: [{data, backgroundColor: color, borderRadius: 3, barThickness: 16}]},
+    options: {indexAxis: 'y', maintainAspectRatio: false, plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => ` ${fmt.format(c.parsed.x)} ${unit.toLowerCase()}`}}},
+      scales: {x: {grace: '12%', grid: {color: '#f1f5f9'}, title: {display: true, text: unit}}, y: {grid: {display: false}}}}
+  }, list.length > 0);
+}
+
+function renderCharts(rows) {
+  Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.color = '#64748b';
+  const emp = groupBy(rows, 'empleado');
+  $('empNote').textContent = `${emp.length} empleados`;
+  barChart('cBar', 'wBar', emp, e => e.h, '#6366f1', 'Horas', nf);
+  barChart('cTick', 'wTick', [...emp].sort((a, b) => b.t - a.t), e => e.t, '#10b981', 'Tickets', n0);
+  barChart('cAvg', 'wAvg', emp.map(e => ({...e, a: e.h / e.t})).sort((a, b) => b.a - a.a), e => e.a, '#64748b', 'Horas por ticket', nf);
+  const sv = groupBy(rows, 'servicio').sort((a, b) => b.t - a.t);
+  const sidx = new Map();
+  for (const r of rows) { const x = sidx.get(r.servicio) || []; if (x.length < 5) x.push(r.id); sidx.set(r.servicio, x); }
+  $('svList').innerHTML = sv.map(x => `<button data-sv="${esc(x.name)}" class="border border-slate-200 hover:bg-slate-50 rounded-md px-2.5 py-1 text-xs text-slate-700">${esc(x.name)} · ${n0.format(x.t)} · Ver detalle</button>`).join('');
+  drawChart('cDonut', {
+    type: 'doughnut',
+    data: {labels: sv.map(x => x.name), datasets: [{data: sv.map(x => x.t), backgroundColor: sv.map((_, i) => COLORS[i % COLORS.length]), borderColor: '#fff', borderWidth: 2}]},
+    options: {maintainAspectRatio: false, cutout: '62%',
+      onClick: (ev, els, ch) => { if (els.length) openService(ch.data.labels[els[0].index]); },
+      onHover: (ev, els) => { ev.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      plugins: {legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 8}, onClick: (ev, it, lg) => openService(lg.chart.data.labels[it.index])},
+        tooltip: {callbacks: {
+          label: c => ` ${c.label}: ${n0.format(c.parsed)} tickets (${(c.parsed / rows.length * 100).toFixed(1)}%)`,
+          afterBody: it => ['IDs: ' + (sidx.get(it[0].label) || []).join(', ') + '…', 'Clic para ver el detalle']}}}}
+  }, sv.length > 0);
+}
+
+const emptyRow = cols => `<tr><td colspan="${cols}" class="text-center text-slate-400 py-6">Sin datos para los filtros seleccionados</td></tr>`;
+const totalRow = rows => `<tr class="font-semibold bg-slate-50"><td>Total</td><td class="n">${n0.format(rows.length)}</td><td class="n">${nf.format(rows.reduce((s, r) => s + r.horas, 0))}</td><td></td></tr>`;
+
+function renderEmpTable(rows) {
+  const list = groupBy(rows, 'empleado');
+  $('tEmp').innerHTML = list.length
+    ? list.map(e => `<tr><td>${esc(e.name)}</td><td class="n">${n0.format(e.t)}</td><td class="n">${nf.format(e.h)}</td><td class="n"><button data-emp="${esc(e.name)}" class="text-indigo-600 hover:underline text-xs font-medium">Ver reporte</button></td></tr>`).join('') + totalRow(rows)
+    : emptyRow(4);
+}
+
+function renderTree(rows) {
+  const tree = new Map();
+  for (const r of rows) {
+    const G = tree.get(r.grupo) || {t: 0, h: 0, k: new Map()}; tree.set(r.grupo, G); G.t++; G.h += r.horas;
+    const A = G.k.get(r.app) || {t: 0, h: 0, k: new Map()}; G.k.set(r.app, A); A.t++; A.h += r.horas;
+    const S = A.k.get(r.sub) || {t: 0, h: 0}; A.k.set(r.sub, S); S.t++; S.h += r.horas;
+  }
+  const sorted = m => [...m].sort((a, b) => b[1].h - a[1].h);
+  const cols = 'grid grid-cols-[1fr_4.5rem_5rem] gap-2 items-center';
+  const nums = x => `<span class="text-right">${n0.format(x.t)}</span><span class="text-right">${nf.format(x.h)}</span>`;
+  const sum = (n, x, cls, pad) => `<summary class="${cols} cursor-pointer py-2 pr-3 hover:bg-slate-50 ${cls}" style="padding-left:${pad}rem"><span class="flex items-center gap-1.5 min-w-0"><span class="chev text-slate-400 text-xs">▸</span><span class="truncate">${esc(n)}</span></span>${nums(x)}</summary>`;
+  let html = '';
+  for (const [g, G] of sorted(tree)) {
+    html += `<details class="border-b border-slate-100">${sum(g, G, 'font-semibold bg-slate-50 text-slate-900', .75)}`;
+    for (const [a, A] of sorted(G.k)) {
+      html += `<details>${sum(a, A, 'font-medium text-slate-700', 1.75)}`;
+      for (const [sb, S] of sorted(A.k)) html += `<div class="${cols} py-1.5 pr-3 text-slate-500" style="padding-left:3.25rem"><span class="truncate">${esc(sb)}</span>${nums(S)}</div>`;
+      html += '</details>';
+    }
+    html += '</details>';
+  }
+  $('tTree').innerHTML = html
+    ? html + `<div class="${cols} py-2 px-3 font-semibold bg-slate-50"><span>Total</span>${nums({t: rows.length, h: rows.reduce((s, r) => s + r.horas, 0)})}</div>`
+    : '<p class="text-center text-slate-400 py-6">Sin datos para los filtros seleccionados</p>';
+}
+
+function renderLog(rows) {
+  const q = search.toLowerCase();
+  const list = q ? rows.filter(r => r.id.includes(q) || r.empleado.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q)) : rows;
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  page = Math.min(page, pages);
+  const start = (page - 1) * PAGE_SIZE, slice = list.slice(start, start + PAGE_SIZE);
+  $('tLog').innerHTML = slice.length ? slice.map(r => `<tr>
+    <td class="font-medium text-slate-900">${esc(r.id)}</td><td>${esc(r.empleado)}</td><td>${esc(r.servicio)}</td>
+    <td>${esc(r.app)}<div class="text-xs text-slate-500">${esc(r.grupo)}</div></td>
+    <td class="n">${nf.format(r.horas)}</td><td class="n">${fmtDate(r.fecha)}</td></tr>`).join('') : emptyRow(6);
+  $('pInfo').textContent = list.length ? `${n0.format(start + 1)}–${n0.format(start + slice.length)} de ${n0.format(list.length)} · Página ${page} de ${n0.format(pages)}` : '0 registros';
+  $('pPrev').disabled = page <= 1; $('pNext').disabled = page >= pages;
+}
+
+function render() {
+  const rows = filtered();
+  renderKPIs(rows); renderCharts(rows); renderEmpTable(rows); renderTree(rows); renderLog(rows);
+}
+
+// ---------- Rangos, detalle, reportes y pestañas ----------
+function syncRange() {  // las fechas siempre quedan fijas al rango del Excel
+  F.from = RANGE.min; F.to = RANGE.max;
+  $('fFrom').value = RANGE.min; $('fTo').value = RANGE.max;
+}
+const r2 = n => Math.round(n * 100) / 100;
+const logRow = r => `<tr><td class="font-medium text-slate-900">${esc(r.id)}</td><td>${esc(r.empleado)}</td><td>${esc(r.servicio)}</td><td>${esc(r.app)}<div class="text-xs text-slate-500">${esc(r.grupo)}</div></td><td class="n">${nf.format(r.horas)}</td><td class="n">${fmtDate(r.fecha)}</td></tr>`;
+let detail = {title: '', rows: []};
+const MAX_MODAL = 500;
+
+function openDetail(title, rows) {
+  detail = {title, rows};
+  $('mTitle').textContent = title;
+  $('mSub').textContent = `${n0.format(rows.length)} tickets · ${nf.format(rows.reduce((s, r) => s + r.horas, 0))} horas`;
+  $('mBody').innerHTML = rows.slice(0, MAX_MODAL).map(logRow).join('') || emptyRow(6);
+  $('mNote').textContent = rows.length > MAX_MODAL ? `Se muestran ${MAX_MODAL} de ${n0.format(rows.length)}; el PDF incluye hasta ${n0.format(MAX_PDF_ROWS)}.` : '';
+  $('modal').classList.remove('hidden'); $('modal').classList.add('flex'); $('mClose').focus();
+}
+const closeDetail = () => { $('modal').classList.add('hidden'); $('modal').classList.remove('flex'); };
+const openService = sv => openDetail(sv + (F.empleado ? ' · ' + F.empleado : ''), filtered().filter(r => r.servicio === sv));
+
+const MAX_PDF_ROWS = 3000;
+const filtersText = () => [F.grupo && 'Grupo: ' + F.grupo, F.servicio && 'Servicio: ' + F.servicio, F.empleado && 'Empleado: ' + F.empleado].filter(Boolean).join(' | ') || 'Sin filtros adicionales';
+function makePdf(title, rows, withDetail) {
+  if (!window.jspdf || !window.jspdf.jsPDF) return showMsg('No se pudo cargar la librería de PDF. Revisa tu conexión a internet.', false);
+  const doc = new window.jspdf.jsPDF({unit: 'pt', format: 'a4'}), M = 40;
+  const h = rows.reduce((s, r) => s + r.horas, 0), emp = groupBy(rows, 'empleado');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(15, 23, 42); doc.text(title, M, 48);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+  doc.text(`Periodo: ${fmtDate(F.from)} - ${fmtDate(F.to)}  |  ${filtersText()}`, M, 64);
+  doc.text('Generado: ' + new Date().toLocaleString('es-MX'), M, 76);
+  doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+  doc.text(`Tickets: ${n0.format(rows.length)}    Horas: ${nf.format(h)}    Promedio h/ticket: ${rows.length ? nf.format(h / rows.length) : '0'}    Empleados: ${emp.length}`, M, 98);
+  let y = 114;
+  const table = (name, head, body, foot, right) => {
+    if (y > 740) { doc.addPage(); y = 48; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(15, 23, 42); doc.text(name, M, y);
+    doc.autoTable({startY: y + 8, head: [head], body, foot: foot ? [foot] : undefined, showFoot: 'lastPage', theme: 'grid', margin: {left: M, right: M},
+      styles: {fontSize: 8.5, cellPadding: 4, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: .5},
+      headStyles: {fillColor: [241, 245, 249], textColor: [71, 85, 105]}, footStyles: {fillColor: [241, 245, 249], textColor: [15, 23, 42]},
+      columnStyles: Object.fromEntries(right.map(i => [i, {halign: 'right'}]))});
+    y = doc.lastAutoTable.finalY + 20;
+  };
+  table('Resumen por empleado', ['Empleado', 'Tickets', 'Horas', 'Prom. h/ticket'], emp.map(e => [e.name, n0.format(e.t), nf.format(e.h), nf.format(e.h / e.t)]), ['Total', n0.format(rows.length), nf.format(h), rows.length ? nf.format(h / rows.length) : '0'], [1, 2, 3]);
+  table('Resumen por servicio', ['Servicio', 'Tickets', 'Horas'], groupBy(rows, 'servicio').map(x => [x.name, n0.format(x.t), nf.format(x.h)]), null, [1, 2]);
+  table('Resumen por grupo', ['Grupo', 'Tickets', 'Horas'], groupBy(rows, 'grupo').map(x => [x.name, n0.format(x.t), nf.format(x.h)]), null, [1, 2]);
+  if (withDetail) {
+    table('Detalle de tickets' + (rows.length > MAX_PDF_ROWS ? ` (primeros ${n0.format(MAX_PDF_ROWS)} de ${n0.format(rows.length)})` : ''),
+      ['ID Hermes', 'Empleado', 'Servicio', 'Aplicación', 'Horas', 'Fecha'],
+      rows.slice(0, MAX_PDF_ROWS).map(r => [r.id, r.empleado, r.servicio, r.app, nf.format(r.horas), fmtDate(r.fecha)]), null, [4, 5]);
+  }
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.text(`Página ${i} de ${pages}`, 595 - M, 818, {align: 'right'}); }
+  doc.save(title.replace(/[^\w\-]+/g, '_').slice(0, 80) + '.pdf');
+}
+
+$('tEmp').onclick = e => { const b = e.target.closest('button[data-emp]'); if (b) openDetail('Reporte de ' + b.dataset.emp, filtered().filter(r => r.empleado === b.dataset.emp)); };
+$('svList').onclick = e => { const b = e.target.closest('button[data-sv]'); if (b) openService(b.dataset.sv); };
+$('mClose').onclick = closeDetail;
+$('modal').onclick = e => { if (e.target === $('modal')) closeDetail(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+$('mDl').onclick = () => makePdf(detail.title, detail.rows, true);
+$('btnReport').onclick = () => {
+  const rows = filtered(); if (!rows.length) return showMsg('No hay datos para generar el reporte.', false);
+  makePdf('Reporte de tickets por empleado', rows, false);
+};
+$('btnOpen').onclick = () => document.querySelectorAll('#tTree details').forEach(d => d.open = true);
+$('btnShut').onclick = () => document.querySelectorAll('#tTree details').forEach(d => d.open = false);
+
+const TABS = {graficas: 'Gráficas', resumenes: 'Resúmenes', registro: 'Registro de tickets'};
+function showTab(n) {
+  document.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== n));
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    const a = b.dataset.tab === n; b.textContent = TABS[b.dataset.tab]; b.setAttribute('aria-selected', a);
+    b.className = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px ' + (a ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700');
+  });
+  Object.values(charts).forEach(c => c.resize());
+}
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+// ---------- Carga de datos ----------
+function fillSelect(id, values, label) {
+  $(id).innerHTML = `<option value="">${label}</option>` + [...new Set(values)].sort((a, b) => a.localeCompare(b, 'es')).map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
+function setData(rows, source) {
+  ALL = rows; page = 1; search = ''; $('fSearch').value = '';
+  Object.keys(F).forEach(k => F[k] = '');
+  setSk(false);
+  fillSelect('fGrupo', rows.map(r => r.grupo), 'Todos los grupos');
+  fillSelect('fServicio', rows.map(r => r.servicio), 'Todos los servicios');
+  fillSelect('fEmpleado', rows.map(r => r.empleado), 'Todos los empleados');
+  const d = rows.map(r => r.fecha).filter(Boolean).sort();
+  RANGE.min = d[0] || ''; RANGE.max = d[d.length - 1] || '';
+  F.from = RANGE.min; F.to = RANGE.max;
+  $('fFrom').min = $('fFrom').max = RANGE.min; $('fTo').min = $('fTo').max = RANGE.max;
+  syncRange();
+  $('period').textContent = d.length ? `Período: ${fmtDate(d[0])} - ${fmtDate(d[d.length - 1])}` : 'Período: sin fechas válidas';
+  $('source').textContent = `${source} · ${n0.format(rows.length)} registros`;
+  render();
+}
+
+let msgTimer;
+function showMsg(text, ok) {
+  const m = $('msg'); m.textContent = text;
+  m.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-[70] w-[92%] max-w-xl text-sm rounded-md px-3 py-2 border shadow-md ' + (ok === null ? 'bg-slate-100 text-slate-600 border-slate-200' : ok ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200');
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.add('hidden'), ok ? 8000 : 12000);
+}
+const setSk = on => { document.documentElement.classList.toggle('sk', on); document.body.classList.toggle('sk', on); };
+
+const MAX_BYTES = 30 * 1024 * 1024, MAX_ROWS = 200000, REQUIRED = ['HERMES', 'EMPLEADO', 'INCURRIDO'];
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+async function readXlsx(f) {
+  if (!/\.(xls|xlsx)$/i.test(f.name)) {
+    throw new Error('Formato no permitido: solo se aceptan archivos Excel (.xls o .xlsx).');
+  }
+
+  if (f.size === 0 || f.size > MAX_BYTES) {
+    throw new Error('El archivo está vacío o supera los 30 MB.');
+  }
+
+  const extension = f.name.split('.').pop().toLowerCase();
+  const buf = await f.arrayBuffer();
+
+  if (extension === 'xlsx') {
+    // Validación básica del formato XLSX (archivo ZIP)
+    const h = new Uint8Array(buf, 0, 4);
+
+    if (!(h[0] === 0x50 && h[1] === 0x4B &&
+          h[2] === 0x03 && h[3] === 0x04)) {
+      throw new Error('El contenido no corresponde a un archivo .xlsx válido.');
+    }
+  } else {
+    // Validación básica del formato XLS antiguo (OLE Compound File)
+    const h = new Uint8Array(buf, 0, 8);
+    const signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
+    const valid = signature.every((value, index) => h[index] === value);
+
+    if (!valid) {
+      throw new Error('El contenido no corresponde a un archivo .xls válido.');
+    }
+  }
+
+  const wb = XLSX.read(buf, {
+    type: 'array',
+    cellFormula: false,
+    cellHTML: false,
+    cellStyles: false,
+    bookVBA: false,
+    sheetRows: MAX_ROWS + 2
+  });
+
+  const ws = wb.Sheets[wb.SheetNames[0]];
+
+  if (!ws) {
+    throw new Error('El libro no tiene hojas.');
+  }
+
+  const raw = XLSX.utils.sheet_to_json(ws, {
+    defval: null,
+    raw: true
+  });
+
+  if (!raw.length) {
+    throw new Error('La primera hoja no tiene registros.');
+  }
+
+  if (raw.length > MAX_ROWS) {
+    throw new Error(
+      'El archivo supera el máximo de ' + n0.format(MAX_ROWS) + ' filas.'
+    );
+  }
+
+  const keys = new Set(Object.keys(raw[0]).map(normKey));
+  const missing = REQUIRED.filter(k => !keys.has(k));
+
+  if (!keys.has('FECHA INICIO') && !keys.has('FECHA')) {
+    missing.push('FECHA INICIO');
+  }
+
+  if (missing.length) {
+    throw new Error(
+      'Faltan columnas obligatorias: ' + missing.join(', ') + '.'
+    );
+  }
+
+  return normalize(raw);
+}
+
+
+
+let busy = false;
+async function loadFile(f) {
+  if (!f || busy) return;
+  busy = true;
+  const btns = [$('btnImport'), $('btnImport2')];
+  btns.forEach(b => { b.disabled = true; b.textContent = 'Cargando…'; });
+  try {
+    const rows = await readXlsx(f);
+    if (!rows.length) throw new Error('No se encontraron registros con ID en la columna HERMES.');
+    setData(rows, f.name); $('ctaErr').textContent = '';
+    const sinFecha = rows.filter(r => !r.fecha).length;
+    showMsg(`Archivo cargado: ${f.name} (${n0.format(rows.length)} registros)` + (sinFecha ? `. ${sinFecha} sin FECHA INICIO válida.` : '.'), true);
+  } catch (err) { const t = 'No se pudo cargar: ' + err.message; $('ctaErr').textContent = t; showMsg(t, false); }
+  finally { busy = false; btns.forEach(b => { b.disabled = false; b.textContent = 'Importar Excel'; }); }
+}
+$('btnImport').onclick = $('btnImport2').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; loadFile(f); };
+
+// Arrastrar y soltar (también evita que el navegador abra el archivo soltado)
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+let dragN = 0;
+const hideDrop = () => { dragN = 0; $('drop').classList.add('hidden'); $('drop').classList.remove('flex'); };
+window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragN++; $('drop').classList.remove('hidden'); $('drop').classList.add('flex'); });
+window.addEventListener('dragover', e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+window.addEventListener('dragleave', e => { if (hasFiles(e) && --dragN <= 0) hideDrop(); });
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return; e.preventDefault(); hideDrop();
+  const fs = e.dataTransfer.files;
+  if (fs.length !== 1) return showMsg('Suelta un solo archivo Excel (.xlsx).', false);
+  loadFile(fs[0]);
+});
+
+// ---------- Eventos ----------
+[['fGrupo', 'grupo'], ['fServicio', 'servicio'], ['fEmpleado', 'empleado']].forEach(([id, k]) =>
+  $(id).onchange = e => { F[k] = e.target.value; page = 1; render(); });
+['fFrom', 'fTo'].forEach(id => { $(id).onchange = $(id).oninput = () => { syncRange(); render(); }; });
+$('btnClear').onclick = () => {
+  Object.keys(F).forEach(k => F[k] = '');
+  ['fGrupo', 'fServicio', 'fEmpleado'].forEach(id => $(id).value = '');
+  F.from = RANGE.min; F.to = RANGE.max; syncRange();
+  page = 1; render();
+};
+$('fSearch').oninput = e => { search = e.target.value.trim(); page = 1; renderLog(filtered()); };
+$('pPrev').onclick = () => { page--; renderLog(filtered()); };
+$('pNext').onclick = () => { page++; renderLog(filtered()); };
+
+// ---------- Inicio ----------
+setSk(true);
+$('period').textContent = 'Período: —';
+$('source').textContent = 'Sin archivo cargado';
+showTab('graficas');
+</script>
+</body>
+</html>
